@@ -5,6 +5,8 @@
 
 #define DHT_PIN 32
 #define DHT_TYPE DHT21
+#define waterFlow 33
+
 DHT dht(DHT_PIN, DHT_TYPE);
 
 // uRTCLib rtcData(0x57);
@@ -56,6 +58,11 @@ void loop()
     Serial.print(now.minute(), DEC);
     Serial.print(':');
     Serial.print(now.second(), DEC);
+    Serial.print(" ");
+
+    int analogWaterFlow = analogRead(waterFlow);
+    Serial.print("Analog Water Flow: ");
+    Serial.print(analogWaterFlow);
     Serial.print(" ");
 
     // int tahun = rtcData.year();
