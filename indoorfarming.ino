@@ -3,9 +3,13 @@
 // #include "uRTCLib.h"
 #include <Wire.h>
 #include <Arduino.h>
+#include <LiquidCrystal_I2C.h>
+#include <ArduinoOTA.h>
+
 #if defined(ESP32)
 #include <WiFi.h>
 #elif defined(ESP8266)
+
 #include <ESP8266WiFi.h>
 #endif
 #include <Firebase_ESP_Client.h>
@@ -17,6 +21,7 @@
 
 #define WIFI_SSID "Workshop Elka"
 #define WIFI_PASSWORD "gapakekabel"
+// const char *otaPassword = "cricket-ota";
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyCq9s13ZGnSAC0ZW4SyjmvYTJT-32g7e6E"
@@ -34,6 +39,7 @@
 #define KIPAS_BESAR 26
 
 DHT dht(DHT_PIN, DHT_TYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // uRTCLib rtcData(0x57);
 RTC_DS3231 rtc;
@@ -62,6 +68,13 @@ unsigned long sendDataPrevMillis = 0;
 int intValue;
 float floatValue;
 bool signupOK = false;
+
+const int analogMin = 0;    // Minimum analog reading
+const int analogMax = 4095; // Maximum analog reading for ESP32
+unsigned long previousMillis = 0;
+const long interval = 2000; // Interval for switching display
+bool displayTempHum = true;
+
 void setup()
 {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -75,6 +88,11 @@ void setup()
     Serial.print("Connected with IP: ");
     Serial.println(WiFi.localIP());
     Serial.println();
+    // Inisialisasi OTA
+    ArduinoOTA.setHostname("ESP32-CRICKET-OTA");
+    // ArduinoOTA.setPassword(otaPassword);
+    ArduinoOTA.begin();
+    Serial.println("✅ OTA Siap, ESP32 menunggu pembaruan firmware...");
 
     /* Assign the api key (required) */
     config.api_key = API_KEY;
@@ -126,15 +144,20 @@ void setup()
     //     // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
     // }
     dht.begin();
+    lcd.begin();     // Initialize the LCD
+    lcd.backlight(); // Turn on the backlight
 }
 
 void loop()
 {
+    ArduinoOTA.handle();
+    lcd.clear();
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     int analogWaterFlow = analogRead(waterFlow);
-    Serial.print("Analog Water Flow: ");
-    Serial.print(analogWaterFlow);
+    int waterLevelPercentage = map(analogWaterFlow, analogMin, analogMax, 0, 100); // Map the analog reading to percentage
+    Serial.print(waterLevelPercentage);
+    Serial.println(" %");
     Serial.print(" ");
     // Check if any reads failed and exit early (to try again).
     if (isnan(h) || isnan(t))
@@ -163,7 +186,7 @@ void loop()
         {
             Serial.println(fbdo.errorReason());
         }
-        if (Firebase.RTDB.setFloat(&fbdo, "water_level/", analogWaterFlow))
+        if (Firebase.RTDB.setFloat(&fbdo, "water_level/", waterLevelPercentage))
         {
             Serial.println("PASSED");
         }
@@ -261,6 +284,41 @@ void loop()
         Serial.print("Temperature: ");
         Serial.print(t);
         Serial.println(" *C");
+
+        char tempStr[6];
+        char humStr[6];
+        char waterLevelStr[6];
+        dtostrf(t, 4, 1, tempStr);
+        dtostrf(h, 4, 1, humStr);
+        dtostrf(waterLevelPercentage, 4, 1, waterLevelStr);
+
+        unsigned long currentMillis = millis();
+        if (currentMillis - previousMillis >= interval)
+        {
+            previousMillis = currentMillis;
+            displayTempHum = !displayTempHum; // Toggle the display state
+        }
+
+        lcd.clear();
+        if (displayTempHum)
+        {
+            lcd.setCursor(0, 0);
+            lcd.print("T:");
+            lcd.print(tempStr);
+            lcd.print(" C");
+            lcd.setCursor(0, 1);
+            lcd.print("H:");
+            lcd.print(humStr);
+            lcd.print(" %");
+        }
+        else
+        {
+            lcd.setCursor(0, 0);
+            lcd.print("Water Level:");
+            lcd.setCursor(0, 1);
+            lcd.print(waterLevelStr);
+            lcd.print(" %");
+        }
     }
     delay(2000);
 
